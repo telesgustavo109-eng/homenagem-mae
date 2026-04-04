@@ -21,14 +21,20 @@ export default async function HomenagemPage({ params }: PageProps) {
     notFound();
   }
 
-  const url = `http://localhost:3000/h/${slug}`;
+  // 🔥 PEGA A URL REAL AUTOMATICAMENTE
+  const baseUrl =
+    process.env.VERCEL_URL
+      ? `https://${process.env.VERCEL_URL}`
+      : "http://localhost:3000";
+
+  const url = `${baseUrl}/h/${slug}`;
   const qrCode = await QRCode.toDataURL(url);
 
   return (
     <main className="min-h-screen bg-pink-50 flex items-center justify-center px-6 py-10">
       <div className="w-full max-w-2xl bg-white rounded-3xl shadow-lg p-8 text-center">
         <p className="text-sm text-zinc-500 mb-2">Link da homenagem:</p>
-        <p className="text-pink-600 font-semibold mb-6 break-all">{slug}</p>
+        <p className="text-pink-600 font-semibold mb-6 break-all">{url}</p>
 
         <h1 className="text-4xl font-bold text-pink-600 mb-4">
           Para {data.nome_mae} 💖
