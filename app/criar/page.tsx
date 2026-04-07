@@ -1,8 +1,46 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import {
+  Playfair_Display,
+  Dancing_Script,
+  Cinzel,
+  Poppins,
+  Cormorant_Garamond,
+  Great_Vibes,
+} from "next/font/google";
+
+const playfair = Playfair_Display({
+  subsets: ["latin"],
+  weight: ["400", "700"],
+});
+
+const dancing = Dancing_Script({
+  subsets: ["latin"],
+  weight: ["400", "700"],
+});
+
+const cinzel = Cinzel({
+  subsets: ["latin"],
+  weight: ["400", "700"],
+});
+
+const poppins = Poppins({
+  subsets: ["latin"],
+  weight: ["400", "500", "700"],
+});
+
+const cormorant = Cormorant_Garamond({
+  subsets: ["latin"],
+  weight: ["400", "500", "700"],
+});
+
+const greatVibes = Great_Vibes({
+  subsets: ["latin"],
+  weight: ["400"],
+});
 
 type Estilo =
   | "romantico"
@@ -312,6 +350,7 @@ export default function CriarPage() {
           nomeComprador={nomeComprador}
           mensagem={mensagem}
           musicaNome={musicaNome}
+          musicaUrl={musicaUrl}
           previewFotos={previewFotos}
           temVideo={!!arquivoVideo}
         />
@@ -326,6 +365,7 @@ function PreviewLateral({
   nomeComprador,
   mensagem,
   musicaNome,
+  musicaUrl,
   previewFotos,
   temVideo,
 }: {
@@ -334,6 +374,7 @@ function PreviewLateral({
   nomeComprador: string;
   mensagem: string;
   musicaNome: string;
+  musicaUrl: string;
   previewFotos: string[];
   temVideo: boolean;
 }) {
@@ -343,6 +384,33 @@ function PreviewLateral({
     mensagem ||
     "Sua mensagem aparecerá aqui no preview, junto com vídeo, fotos e música.";
 
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [tocando, setTocando] = useState(false);
+
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.load();
+      setTocando(false);
+    }
+  }, [musicaUrl]);
+
+  function toggleMusica() {
+    if (!audioRef.current) return;
+
+    if (tocando) {
+      audioRef.current.pause();
+      setTocando(false);
+    } else {
+      audioRef.current
+        .play()
+        .then(() => setTocando(true))
+        .catch(() => {
+          alert("O navegador bloqueou a música. Tente tocar novamente.");
+        });
+    }
+  }
+
   const tema =
     estilo === "elegante"
       ? {
@@ -350,6 +418,10 @@ function PreviewLateral({
           badge: "text-zinc-500",
           title: "text-zinc-800",
           box: "bg-zinc-50",
+          button: "bg-zinc-800 hover:bg-zinc-900",
+          titleFont: cinzel.className,
+          msgFont: cormorant.className,
+          signFont: cinzel.className,
         }
       : estilo === "floral"
       ? {
@@ -357,6 +429,10 @@ function PreviewLateral({
           badge: "text-rose-400",
           title: "text-rose-600",
           box: "bg-rose-50",
+          button: "bg-rose-500 hover:bg-rose-600",
+          titleFont: greatVibes.className,
+          msgFont: cormorant.className,
+          signFont: dancing.className,
         }
       : estilo === "aniversario"
       ? {
@@ -364,6 +440,10 @@ function PreviewLateral({
           badge: "text-orange-400",
           title: "text-orange-600",
           box: "bg-orange-50",
+          button: "bg-orange-500 hover:bg-orange-600",
+          titleFont: poppins.className,
+          msgFont: poppins.className,
+          signFont: poppins.className,
         }
       : estilo === "namoro"
       ? {
@@ -371,6 +451,10 @@ function PreviewLateral({
           badge: "text-fuchsia-400",
           title: "text-fuchsia-600",
           box: "bg-fuchsia-50",
+          button: "bg-fuchsia-500 hover:bg-fuchsia-600",
+          titleFont: dancing.className,
+          msgFont: cormorant.className,
+          signFont: greatVibes.className,
         }
       : estilo === "avo"
       ? {
@@ -378,33 +462,53 @@ function PreviewLateral({
           badge: "text-violet-400",
           title: "text-violet-600",
           box: "bg-violet-50",
+          button: "bg-violet-500 hover:bg-violet-600",
+          titleFont: cormorant.className,
+          msgFont: cormorant.className,
+          signFont: greatVibes.className,
         }
       : {
           bg: "from-pink-100 via-pink-50 to-white",
           badge: "text-pink-400",
           title: "text-pink-600",
           box: "bg-pink-50",
+          button: "bg-pink-500 hover:bg-pink-600",
+          titleFont: playfair.className,
+          msgFont: cormorant.className,
+          signFont: dancing.className,
         };
 
   return (
     <div className="rounded-3xl border border-pink-100 bg-white p-6 shadow-lg">
-      <p className="mb-3 text-sm font-semibold uppercase tracking-[0.25em] text-pink-400">
-        Preview ao vivo
-      </p>
+      <audio ref={audioRef} src={musicaUrl} loop />
 
-      <div className={`overflow-hidden rounded-[2rem] bg-gradient-to-b ${tema.bg} shadow-sm border border-zinc-100`}>
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <p className="text-sm font-semibold uppercase tracking-[0.25em] text-pink-400">
+          Preview ao vivo
+        </p>
+
+        <button
+          type="button"
+          onClick={toggleMusica}
+          className={`rounded-xl px-4 py-2 text-sm font-semibold text-white transition ${tema.button}`}
+        >
+          {tocando ? "Pausar música" : "Tocar música"}
+        </button>
+      </div>
+
+      <div
+        className={`overflow-hidden rounded-[2rem] bg-gradient-to-b ${tema.bg} border border-zinc-100 shadow-sm`}
+      >
         <div className="p-5">
           <p className={`text-xs font-semibold uppercase tracking-[0.25em] ${tema.badge}`}>
             Prévia do tema
           </p>
 
-          <h3 className={`mt-2 text-3xl font-bold ${tema.title}`}>
+          <h3 className={`mt-2 text-3xl ${tema.title} ${tema.titleFont}`}>
             Para {nome}
           </h3>
 
-          <p className="mt-2 text-sm text-zinc-500">
-            Música escolhida: {musicaNome}
-          </p>
+          <p className="mt-2 text-sm text-zinc-500">Música escolhida: {musicaNome}</p>
 
           {temVideo && (
             <div className="mt-4 rounded-2xl bg-black/90 p-4 text-center text-white">
@@ -425,12 +529,14 @@ function PreviewLateral({
             </div>
           )}
 
-          <div className={`mt-5 rounded-2xl p-4 text-zinc-700 ${tema.box}`}>
+          <div className={`mt-5 rounded-2xl p-4 text-zinc-700 ${tema.box} ${tema.msgFont}`}>
             {msg.slice(0, 150)}
             {msg.length > 150 ? "..." : ""}
           </div>
 
-          <p className={`mt-4 font-semibold ${tema.title}`}>Com amor, {de}</p>
+          <p className={`mt-4 text-xl ${tema.title} ${tema.signFont}`}>
+            Com amor, {de}
+          </p>
         </div>
       </div>
     </div>
