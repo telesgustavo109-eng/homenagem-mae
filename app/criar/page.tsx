@@ -74,6 +74,9 @@ const MUSICAS: Musica[] = [
   },
 ];
 
+const LIMITE_VIDEO_MB = 25;
+const LIMITE_IMAGEM_MB = 10;
+
 export default function CriarPage() {
   const router = useRouter();
 
@@ -115,10 +118,34 @@ export default function CriarPage() {
       body: formData,
     });
 
-    const dados = await resposta.json();
+    const texto = await resposta.text();
+
+    let dados: { url?: string; error?: string } = {};
+
+    try {
+      dados = texto ? JSON.parse(texto) : {};
+    } catch {
+      if (!resposta.ok) {
+        if (texto.toLowerCase().includes("request entity too large")) {
+          throw new Error(
+            `O ${tipo === "video" ? "vídeo" : "arquivo"} está grande demais para upload.`
+          );
+        }
+
+        throw new Error(
+          texto || `Erro ao enviar ${tipo === "video" ? "vídeo" : "arquivo"}.`
+        );
+      }
+    }
 
     if (!resposta.ok) {
-      throw new Error(dados.error || "Erro ao enviar arquivo.");
+      throw new Error(
+        dados.error || `Erro ao enviar ${tipo === "video" ? "vídeo" : "arquivo"}.`
+      );
+    }
+
+    if (!dados.url) {
+      throw new Error("Upload concluído, mas a URL não foi retornada.");
     }
 
     return dados.url;
@@ -152,6 +179,24 @@ export default function CriarPage() {
 
       if (arquivosFotos.length > 4) {
         throw new Error("Você pode enviar no máximo 4 fotos.");
+      }
+
+      for (const foto of arquivosFotos) {
+        const tamanhoMb = foto.size / (1024 * 1024);
+        if (tamanhoMb > LIMITE_IMAGEM_MB) {
+          throw new Error(
+            `Cada foto pode ter no máximo ${LIMITE_IMAGEM_MB}MB.`
+          );
+        }
+      }
+
+      if (arquivoVideo) {
+        const tamanhoMb = arquivoVideo.size / (1024 * 1024);
+        if (tamanhoMb > LIMITE_VIDEO_MB) {
+          throw new Error(
+            `O vídeo pode ter no máximo ${LIMITE_VIDEO_MB}MB.`
+          );
+        }
       }
 
       const slug = gerarSlug(nomeMae);
@@ -317,6 +362,9 @@ export default function CriarPage() {
                 }}
                 className="w-full rounded-xl border border-zinc-300 bg-white px-4 py-3 text-zinc-900 file:mr-4 file:rounded-lg file:border-0 file:bg-pink-500 file:px-4 file:py-2 file:font-medium file:text-white hover:file:bg-pink-600"
               />
+              <p className="mt-2 text-xs text-zinc-500">
+                Máximo de 4 fotos e até {LIMITE_IMAGEM_MB}MB por foto.
+              </p>
             </div>
 
             <div>
@@ -332,6 +380,9 @@ export default function CriarPage() {
                 }}
                 className="w-full rounded-xl border border-zinc-300 bg-white px-4 py-3 text-zinc-900 file:mr-4 file:rounded-lg file:border-0 file:bg-pink-500 file:px-4 file:py-2 file:font-medium file:text-white hover:file:bg-pink-600"
               />
+              <p className="mt-2 text-xs text-zinc-500">
+                Máximo de {LIMITE_VIDEO_MB}MB. Para testar, use um vídeo curto.
+              </p>
             </div>
 
             <button
@@ -406,7 +457,7 @@ function PreviewLateral({
         .play()
         .then(() => setTocando(true))
         .catch(() => {
-          alert("O navegador bloqueou a música. Tente tocar novamente.");
+          alert("O navegador bloqueou a música. Toque novamente.");
         });
     }
   }
