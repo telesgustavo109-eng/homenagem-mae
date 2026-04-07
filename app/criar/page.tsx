@@ -1,8 +1,40 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+
+type Estilo =
+  | "romantico"
+  | "floral"
+  | "elegante"
+  | "aniversario"
+  | "namoro"
+  | "avo";
+
+type Musica = {
+  nome: string;
+  url: string;
+};
+
+const MUSICAS: Musica[] = [
+  {
+    nome: "Romântica Suave",
+    url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
+  },
+  {
+    nome: "Delicada Floral",
+    url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3",
+  },
+  {
+    nome: "Elegante",
+    url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3",
+  },
+  {
+    nome: "Feliz Aniversário",
+    url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-10.mp3",
+  },
+];
 
 export default function CriarPage() {
   const router = useRouter();
@@ -10,8 +42,13 @@ export default function CriarPage() {
   const [nomeMae, setNomeMae] = useState("");
   const [nomeComprador, setNomeComprador] = useState("");
   const [mensagem, setMensagem] = useState("");
-  const [estilo, setEstilo] = useState("romantico");
-  const [arquivoImagem, setArquivoImagem] = useState<File | null>(null);
+  const [estilo, setEstilo] = useState<Estilo>("romantico");
+  const [musicaUrl, setMusicaUrl] = useState(MUSICAS[0].url);
+  const [musicaNome, setMusicaNome] = useState(MUSICAS[0].nome);
+
+  const [arquivosFotos, setArquivosFotos] = useState<File[]>([]);
+  const [arquivoVideo, setArquivoVideo] = useState<File | null>(null);
+
   const [carregando, setCarregando] = useState(false);
 
   function gerarSlug(texto: string) {
@@ -27,13 +64,13 @@ export default function CriarPage() {
     return `${base || "homenagem"}-${aleatorio}`;
   }
 
-  async function uploadImagem(): Promise<string> {
-    if (!arquivoImagem) {
-      throw new Error("Escolha uma imagem antes de continuar.");
-    }
-
+  async function uploadArquivo(
+    arquivo: File,
+    tipo: "imagem" | "video"
+  ): Promise<string> {
     const formData = new FormData();
-    formData.append("file", arquivoImagem);
+    formData.append("file", arquivo);
+    formData.append("tipo", tipo);
 
     const resposta = await fetch("/api/upload", {
       method: "POST",
@@ -43,10 +80,26 @@ export default function CriarPage() {
     const dados = await resposta.json();
 
     if (!resposta.ok) {
-      throw new Error(dados.error || "Erro ao enviar imagem.");
+      throw new Error(dados.error || "Erro ao enviar arquivo.");
     }
 
     return dados.url;
+  }
+
+  async function uploadFotos(): Promise<string[]> {
+    const urls: string[] = [];
+
+    for (const arquivo of arquivosFotos) {
+      const url = await uploadArquivo(arquivo, "imagem");
+      urls.push(url);
+    }
+
+    return urls;
+  }
+
+  async function uploadVideo(): Promise<string> {
+    if (!arquivoVideo) return "";
+    return uploadArquivo(arquivoVideo, "video");
   }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -55,16 +108,33 @@ export default function CriarPage() {
     try {
       setCarregando(true);
 
-      const imagemFinal = await uploadImagem();
+      if (arquivosFotos.length === 0) {
+        throw new Error("Adicione pelo menos 1 foto.");
+      }
+
+      if (arquivosFotos.length > 4) {
+        throw new Error("Você pode enviar no máximo 4 fotos.");
+      }
+
       const slug = gerarSlug(nomeMae);
+
+      const fotosUrls = await uploadFotos();
+      const videoUrl = await uploadVideo();
 
       const { error } = await supabase.from("homenagens").insert({
         slug,
         nome_mae: nomeMae,
         nome_comprador: nomeComprador,
         mensagem,
-        imagem_url: imagemFinal,
         estilo,
+        foto_1_url: fotosUrls[0] || null,
+        foto_2_url: fotosUrls[1] || null,
+        foto_3_url: fotosUrls[2] || null,
+        foto_4_url: fotosUrls[3] || null,
+        imagem_url: fotosUrls[0] || null,
+        video_url: videoUrl || null,
+        musica_url: musicaUrl,
+        musica_nome: musicaNome,
       });
 
       if (error) {
@@ -85,132 +155,284 @@ export default function CriarPage() {
     }
   }
 
+  const previewFotos = useMemo(() => {
+    return arquivosFotos.map((arquivo) => URL.createObjectURL(arquivo));
+  }, [arquivosFotos]);
+
   return (
     <main className="min-h-screen bg-pink-50 px-6 py-10">
-      <div className="mx-auto w-full max-w-2xl rounded-3xl bg-white p-8 shadow-lg border border-pink-100">
-        <h1 className="mb-2 text-3xl font-bold text-pink-600">
-          Criar homenagem
-        </h1>
+      <div className="mx-auto grid w-full max-w-7xl gap-8 lg:grid-cols-[1.1fr_0.9fr]">
+        <div className="rounded-3xl border border-pink-100 bg-white p-8 shadow-lg">
+          <h1 className="mb-2 text-3xl font-bold text-pink-600">
+            Criar homenagem premium
+          </h1>
 
-        <p className="mb-6 text-zinc-600">
-          Preencha os dados e escolha o estilo da surpresa.
-        </p>
+          <p className="mb-6 text-zinc-600">
+            Monte sua surpresa com estilo, fotos, vídeo e música.
+          </p>
 
-        <form className="space-y-5" onSubmit={handleSubmit}>
-          <div>
-            <label className="mb-2 block text-sm font-semibold text-zinc-800">
-              Nome da mãe ou avó
-            </label>
-            <input
-              type="text"
-              placeholder="Ex: Eduarda"
-              value={nomeMae}
-              onChange={(e) => setNomeMae(e.target.value)}
-              className="w-full rounded-xl border border-zinc-300 bg-white px-4 py-3 text-zinc-900 placeholder:text-zinc-400 outline-none focus:border-pink-400 focus:ring-2 focus:ring-pink-300"
-              required
-            />
-          </div>
-
-          <div>
-            <label className="mb-2 block text-sm font-semibold text-zinc-800">
-              Seu nome
-            </label>
-            <input
-              type="text"
-              placeholder="Ex: Neto"
-              value={nomeComprador}
-              onChange={(e) => setNomeComprador(e.target.value)}
-              className="w-full rounded-xl border border-zinc-300 bg-white px-4 py-3 text-zinc-900 placeholder:text-zinc-400 outline-none focus:border-pink-400 focus:ring-2 focus:ring-pink-300"
-              required
-            />
-          </div>
-
-          <div>
-            <label className="mb-2 block text-sm font-semibold text-zinc-800">
-              Mensagem
-            </label>
-            <textarea
-              placeholder="Escreva sua mensagem especial..."
-              rows={5}
-              value={mensagem}
-              onChange={(e) => setMensagem(e.target.value)}
-              className="w-full rounded-xl border border-zinc-300 bg-white px-4 py-3 text-zinc-900 placeholder:text-zinc-400 outline-none focus:border-pink-400 focus:ring-2 focus:ring-pink-300"
-              required
-            />
-          </div>
-
-          <div>
-            <label className="mb-3 block text-sm font-semibold text-zinc-800">
-              Escolha o estilo
-            </label>
-
-            <div className="grid gap-3 md:grid-cols-3">
-              <button
-                type="button"
-                onClick={() => setEstilo("romantico")}
-                className={`rounded-2xl border p-4 text-left transition ${
-                  estilo === "romantico"
-                    ? "border-pink-500 bg-pink-50 ring-2 ring-pink-200"
-                    : "border-zinc-200 bg-white hover:border-pink-300"
-                }`}
-              >
-                <p className="font-bold text-pink-600">Romântico</p>
-                <p className="text-sm text-zinc-600">Rosa suave e carinhoso</p>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setEstilo("floral")}
-                className={`rounded-2xl border p-4 text-left transition ${
-                  estilo === "floral"
-                    ? "border-rose-500 bg-rose-50 ring-2 ring-rose-200"
-                    : "border-zinc-200 bg-white hover:border-rose-300"
-                }`}
-              >
-                <p className="font-bold text-rose-600">Floral</p>
-                <p className="text-sm text-zinc-600">Delicado e leve</p>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setEstilo("elegante")}
-                className={`rounded-2xl border p-4 text-left transition ${
-                  estilo === "elegante"
-                    ? "border-zinc-800 bg-zinc-50 ring-2 ring-zinc-300"
-                    : "border-zinc-200 bg-white hover:border-zinc-400"
-                }`}
-              >
-                <p className="font-bold text-zinc-800">Elegante</p>
-                <p className="text-sm text-zinc-600">Premium e sofisticado</p>
-              </button>
+          <form className="space-y-5" onSubmit={handleSubmit}>
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-zinc-800">
+                Nome da pessoa homenageada
+              </label>
+              <input
+                type="text"
+                placeholder="Ex: Eduarda"
+                value={nomeMae}
+                onChange={(e) => setNomeMae(e.target.value)}
+                className="w-full rounded-xl border border-zinc-300 bg-white px-4 py-3 text-zinc-900 outline-none focus:border-pink-400 focus:ring-2 focus:ring-pink-300"
+                required
+              />
             </div>
-          </div>
 
-          <div>
-            <label className="mb-2 block text-sm font-semibold text-zinc-800">
-              Foto especial
-            </label>
-            <input
-              type="file"
-              accept="image/*"
-              onChange={(e) => {
-                const file = e.target.files?.[0] || null;
-                setArquivoImagem(file);
-              }}
-              className="w-full rounded-xl border border-zinc-300 bg-white px-4 py-3 text-zinc-900 file:mr-4 file:rounded-lg file:border-0 file:bg-pink-500 file:px-4 file:py-2 file:font-medium file:text-white hover:file:bg-pink-600"
-              required
-            />
-          </div>
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-zinc-800">
+                Seu nome
+              </label>
+              <input
+                type="text"
+                placeholder="Ex: João Filho"
+                value={nomeComprador}
+                onChange={(e) => setNomeComprador(e.target.value)}
+                className="w-full rounded-xl border border-zinc-300 bg-white px-4 py-3 text-zinc-900 outline-none focus:border-pink-400 focus:ring-2 focus:ring-pink-300"
+                required
+              />
+            </div>
 
-          <button
-            type="submit"
-            disabled={carregando}
-            className="w-full rounded-xl bg-pink-500 px-4 py-3 font-semibold text-white transition hover:bg-pink-600 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {carregando ? "Salvando homenagem..." : "Continuar"}
-          </button>
-        </form>
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-zinc-800">
+                Mensagem
+              </label>
+              <textarea
+                rows={5}
+                placeholder="Escreva sua mensagem especial..."
+                value={mensagem}
+                onChange={(e) => setMensagem(e.target.value)}
+                className="w-full rounded-xl border border-zinc-300 bg-white px-4 py-3 text-zinc-900 outline-none focus:border-pink-400 focus:ring-2 focus:ring-pink-300"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="mb-3 block text-sm font-semibold text-zinc-800">
+                Escolha o estilo
+              </label>
+
+              <div className="grid gap-3 md:grid-cols-3">
+                {[
+                  ["romantico", "Romântico"],
+                  ["floral", "Floral"],
+                  ["elegante", "Elegante"],
+                  ["aniversario", "Aniversário"],
+                  ["namoro", "Namoro"],
+                  ["avo", "Avó Especial"],
+                ].map(([valor, nome]) => (
+                  <button
+                    key={valor}
+                    type="button"
+                    onClick={() => setEstilo(valor as Estilo)}
+                    className={`rounded-2xl border p-4 text-left transition ${
+                      estilo === valor
+                        ? "scale-[1.02] border-pink-500 bg-pink-50 ring-2 ring-pink-200"
+                        : "border-zinc-200 bg-white hover:border-pink-300"
+                    }`}
+                  >
+                    <p className="font-bold text-pink-600">{nome}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-zinc-800">
+                Escolha a música
+              </label>
+              <select
+                value={musicaUrl}
+                onChange={(e) => {
+                  const musica = MUSICAS.find((m) => m.url === e.target.value);
+                  setMusicaUrl(e.target.value);
+                  setMusicaNome(musica?.nome || "Música");
+                }}
+                className="w-full rounded-xl border border-zinc-300 bg-white px-4 py-3 text-zinc-900 outline-none focus:border-pink-400 focus:ring-2 focus:ring-pink-300"
+              >
+                {MUSICAS.map((musica) => (
+                  <option key={musica.url} value={musica.url}>
+                    {musica.nome}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-zinc-800">
+                Fotos (até 4)
+              </label>
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={(e) => {
+                  const files = Array.from(e.target.files || []).slice(0, 4);
+                  setArquivosFotos(files);
+                }}
+                className="w-full rounded-xl border border-zinc-300 bg-white px-4 py-3 text-zinc-900 file:mr-4 file:rounded-lg file:border-0 file:bg-pink-500 file:px-4 file:py-2 file:font-medium file:text-white hover:file:bg-pink-600"
+              />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-zinc-800">
+                Vídeo (1 vídeo)
+              </label>
+              <input
+                type="file"
+                accept="video/*"
+                onChange={(e) => {
+                  const file = e.target.files?.[0] || null;
+                  setArquivoVideo(file);
+                }}
+                className="w-full rounded-xl border border-zinc-300 bg-white px-4 py-3 text-zinc-900 file:mr-4 file:rounded-lg file:border-0 file:bg-pink-500 file:px-4 file:py-2 file:font-medium file:text-white hover:file:bg-pink-600"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={carregando}
+              className="w-full rounded-xl bg-pink-500 px-4 py-3 font-semibold text-white transition hover:bg-pink-600 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {carregando ? "Salvando homenagem..." : "Gerar homenagem premium"}
+            </button>
+          </form>
+        </div>
+
+        <PreviewLateral
+          estilo={estilo}
+          nomeMae={nomeMae}
+          nomeComprador={nomeComprador}
+          mensagem={mensagem}
+          musicaNome={musicaNome}
+          previewFotos={previewFotos}
+          temVideo={!!arquivoVideo}
+        />
       </div>
     </main>
+  );
+}
+
+function PreviewLateral({
+  estilo,
+  nomeMae,
+  nomeComprador,
+  mensagem,
+  musicaNome,
+  previewFotos,
+  temVideo,
+}: {
+  estilo: Estilo;
+  nomeMae: string;
+  nomeComprador: string;
+  mensagem: string;
+  musicaNome: string;
+  previewFotos: string[];
+  temVideo: boolean;
+}) {
+  const nome = nomeMae || "Sua homenagem";
+  const de = nomeComprador || "Você";
+  const msg =
+    mensagem ||
+    "Sua mensagem aparecerá aqui no preview, junto com vídeo, fotos e música.";
+
+  const tema =
+    estilo === "elegante"
+      ? {
+          bg: "from-zinc-200 via-zinc-100 to-white",
+          badge: "text-zinc-500",
+          title: "text-zinc-800",
+          box: "bg-zinc-50",
+        }
+      : estilo === "floral"
+      ? {
+          bg: "from-rose-100 via-pink-50 to-white",
+          badge: "text-rose-400",
+          title: "text-rose-600",
+          box: "bg-rose-50",
+        }
+      : estilo === "aniversario"
+      ? {
+          bg: "from-orange-100 via-pink-50 to-white",
+          badge: "text-orange-400",
+          title: "text-orange-600",
+          box: "bg-orange-50",
+        }
+      : estilo === "namoro"
+      ? {
+          bg: "from-fuchsia-100 via-pink-50 to-white",
+          badge: "text-fuchsia-400",
+          title: "text-fuchsia-600",
+          box: "bg-fuchsia-50",
+        }
+      : estilo === "avo"
+      ? {
+          bg: "from-violet-100 via-pink-50 to-white",
+          badge: "text-violet-400",
+          title: "text-violet-600",
+          box: "bg-violet-50",
+        }
+      : {
+          bg: "from-pink-100 via-pink-50 to-white",
+          badge: "text-pink-400",
+          title: "text-pink-600",
+          box: "bg-pink-50",
+        };
+
+  return (
+    <div className="rounded-3xl border border-pink-100 bg-white p-6 shadow-lg">
+      <p className="mb-3 text-sm font-semibold uppercase tracking-[0.25em] text-pink-400">
+        Preview ao vivo
+      </p>
+
+      <div className={`overflow-hidden rounded-[2rem] bg-gradient-to-b ${tema.bg} shadow-sm border border-zinc-100`}>
+        <div className="p-5">
+          <p className={`text-xs font-semibold uppercase tracking-[0.25em] ${tema.badge}`}>
+            Prévia do tema
+          </p>
+
+          <h3 className={`mt-2 text-3xl font-bold ${tema.title}`}>
+            Para {nome}
+          </h3>
+
+          <p className="mt-2 text-sm text-zinc-500">
+            Música escolhida: {musicaNome}
+          </p>
+
+          {temVideo && (
+            <div className="mt-4 rounded-2xl bg-black/90 p-4 text-center text-white">
+              🎥 Vídeo especial adicionado
+            </div>
+          )}
+
+          {previewFotos.length > 0 && (
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              {previewFotos.slice(0, 4).map((foto, index) => (
+                <img
+                  key={index}
+                  src={foto}
+                  alt={`Preview ${index + 1}`}
+                  className="h-28 w-full rounded-2xl object-cover"
+                />
+              ))}
+            </div>
+          )}
+
+          <div className={`mt-5 rounded-2xl p-4 text-zinc-700 ${tema.box}`}>
+            {msg.slice(0, 150)}
+            {msg.length > 150 ? "..." : ""}
+          </div>
+
+          <p className={`mt-4 font-semibold ${tema.title}`}>Com amor, {de}</p>
+        </div>
+      </div>
+    </div>
   );
 }
