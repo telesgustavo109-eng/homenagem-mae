@@ -74,7 +74,7 @@ const MUSICAS: Musica[] = [
   },
 ];
 
-const LIMITE_VIDEO_MB = 25;
+const LIMITE_VIDEO_MB = 90;
 const LIMITE_IMAGEM_MB = 10;
 
 export default function CriarPage() {
