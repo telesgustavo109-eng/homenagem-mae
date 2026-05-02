@@ -154,6 +154,8 @@ export default function CriarPage() {
   ): Promise<string> {
     const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
     const uploadPreset = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
+    console.log("CLOUD NAME:", cloudName);
+    console.log("UPLOAD PRESET:", uploadPreset);
 
     if (!cloudName || !uploadPreset) {
       throw new Error(
