@@ -55,6 +55,14 @@ type Musica = {
   url: string;
 };
 
+type CloudinaryResponse = {
+  secure_url?: string;
+  url?: string;
+  error?: {
+    message?: string;
+  };
+};
+
 const MUSICAS: Musica[] = [
   {
     nome: "Romântica Suave",
@@ -74,8 +82,9 @@ const MUSICAS: Musica[] = [
   },
 ];
 
-const LIMITE_VIDEO_MB = 90;
+const LIMITE_FOTOS = 4;
 const LIMITE_IMAGEM_MB = 10;
+const LIMITE_VIDEO_MB = 80;
 
 export default function CriarPage() {
   const router = useRouter();
@@ -84,6 +93,7 @@ export default function CriarPage() {
   const [nomeComprador, setNomeComprador] = useState("");
   const [mensagem, setMensagem] = useState("");
   const [estilo, setEstilo] = useState<Estilo>("romantico");
+
   const [musicaUrl, setMusicaUrl] = useState(MUSICAS[0].url);
   const [musicaNome, setMusicaNome] = useState(MUSICAS[0].nome);
 
@@ -91,6 +101,7 @@ export default function CriarPage() {
   const [arquivoVideo, setArquivoVideo] = useState<File | null>(null);
 
   const [carregando, setCarregando] = useState(false);
+  const [statusUpload, setStatusUpload] = useState("");
 
   function gerarSlug(texto: string) {
     const base = texto
@@ -105,57 +116,92 @@ export default function CriarPage() {
     return `${base || "homenagem"}-${aleatorio}`;
   }
 
-  async function uploadArquivo(
+  function validarImagem(file: File) {
+    const tamanhoMb = file.size / (1024 * 1024);
+
+    if (!file.type.startsWith("image/")) {
+      throw new Error(`O arquivo "${file.name}" não é uma imagem válida.`);
+    }
+
+    if (tamanhoMb > LIMITE_IMAGEM_MB) {
+      throw new Error(
+        `A imagem "${file.name}" tem ${tamanhoMb.toFixed(
+          1
+        )}MB. O limite é ${LIMITE_IMAGEM_MB}MB por foto.`
+      );
+    }
+  }
+
+  function validarVideo(file: File) {
+    const tamanhoMb = file.size / (1024 * 1024);
+
+    if (!file.type.startsWith("video/")) {
+      throw new Error(`O arquivo "${file.name}" não é um vídeo válido.`);
+    }
+
+    if (tamanhoMb > LIMITE_VIDEO_MB) {
+      throw new Error(
+        `O vídeo tem ${tamanhoMb.toFixed(
+          1
+        )}MB. O limite atual é ${LIMITE_VIDEO_MB}MB.`
+      );
+    }
+  }
+
+  async function uploadDiretoCloudinary(
     arquivo: File,
     tipo: "imagem" | "video"
   ): Promise<string> {
+    const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
+    const uploadPreset = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
+
+    if (!cloudName || !uploadPreset) {
+      throw new Error(
+        "Cloudinary não configurado. Verifique NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME e NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET."
+      );
+    }
+
     const formData = new FormData();
     formData.append("file", arquivo);
-    formData.append("tipo", tipo);
+    formData.append("upload_preset", uploadPreset);
 
-    const resposta = await fetch("/api/upload", {
+    const endpoint = `https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`;
+
+    const resposta = await fetch(endpoint, {
       method: "POST",
       body: formData,
     });
 
-    const texto = await resposta.text();
-
-    let dados: { url?: string; error?: string } = {};
-
-    try {
-      dados = texto ? JSON.parse(texto) : {};
-    } catch {
-      if (!resposta.ok) {
-        if (texto.toLowerCase().includes("request entity too large")) {
-          throw new Error(
-            `O ${tipo === "video" ? "vídeo" : "arquivo"} está grande demais para upload.`
-          );
-        }
-
-        throw new Error(
-          texto || `Erro ao enviar ${tipo === "video" ? "vídeo" : "arquivo"}.`
-        );
-      }
-    }
+    const dados = (await resposta.json()) as CloudinaryResponse;
 
     if (!resposta.ok) {
       throw new Error(
-        dados.error || `Erro ao enviar ${tipo === "video" ? "vídeo" : "arquivo"}.`
+        dados.error?.message ||
+          `Erro ao enviar ${tipo === "video" ? "vídeo" : "imagem"} para o Cloudinary.`
       );
     }
 
-    if (!dados.url) {
-      throw new Error("Upload concluído, mas a URL não foi retornada.");
+    const urlFinal = dados.secure_url || dados.url;
+
+    if (!urlFinal) {
+      throw new Error(
+        `Upload de ${tipo === "video" ? "vídeo" : "imagem"} concluído, mas nenhuma URL foi retornada.`
+      );
     }
 
-    return dados.url;
+    return urlFinal;
   }
 
   async function uploadFotos(): Promise<string[]> {
     const urls: string[] = [];
 
-    for (const arquivo of arquivosFotos) {
-      const url = await uploadArquivo(arquivo, "imagem");
+    for (let i = 0; i < arquivosFotos.length; i++) {
+      const arquivo = arquivosFotos[i];
+
+      setStatusUpload(`Enviando foto ${i + 1} de ${arquivosFotos.length}...`);
+      validarImagem(arquivo);
+
+      const url = await uploadDiretoCloudinary(arquivo, "imagem");
       urls.push(url);
     }
 
@@ -164,7 +210,12 @@ export default function CriarPage() {
 
   async function uploadVideo(): Promise<string> {
     if (!arquivoVideo) return "";
-    return uploadArquivo(arquivoVideo, "video");
+
+    setStatusUpload("Enviando vídeo...");
+    validarVideo(arquivoVideo);
+
+    const url = await uploadDiretoCloudinary(arquivoVideo, "video");
+    return url;
   }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -172,37 +223,34 @@ export default function CriarPage() {
 
     try {
       setCarregando(true);
+      setStatusUpload("Preparando homenagem...");
+
+      if (!nomeMae.trim()) {
+        throw new Error("Preencha o nome da pessoa homenageada.");
+      }
+
+      if (!nomeComprador.trim()) {
+        throw new Error("Preencha seu nome.");
+      }
+
+      if (!mensagem.trim()) {
+        throw new Error("Escreva uma mensagem.");
+      }
 
       if (arquivosFotos.length === 0) {
         throw new Error("Adicione pelo menos 1 foto.");
       }
 
-      if (arquivosFotos.length > 4) {
-        throw new Error("Você pode enviar no máximo 4 fotos.");
-      }
-
-      for (const foto of arquivosFotos) {
-        const tamanhoMb = foto.size / (1024 * 1024);
-        if (tamanhoMb > LIMITE_IMAGEM_MB) {
-          throw new Error(
-            `Cada foto pode ter no máximo ${LIMITE_IMAGEM_MB}MB.`
-          );
-        }
-      }
-
-      if (arquivoVideo) {
-        const tamanhoMb = arquivoVideo.size / (1024 * 1024);
-        if (tamanhoMb > LIMITE_VIDEO_MB) {
-          throw new Error(
-            `O vídeo pode ter no máximo ${LIMITE_VIDEO_MB}MB.`
-          );
-        }
+      if (arquivosFotos.length > LIMITE_FOTOS) {
+        throw new Error(`Você pode enviar no máximo ${LIMITE_FOTOS} fotos.`);
       }
 
       const slug = gerarSlug(nomeMae);
 
       const fotosUrls = await uploadFotos();
       const videoUrl = await uploadVideo();
+
+      setStatusUpload("Salvando homenagem...");
 
       const { error } = await supabase.from("homenagens").insert({
         slug,
@@ -224,6 +272,7 @@ export default function CriarPage() {
         throw new Error(error.message);
       }
 
+      setStatusUpload("Homenagem criada com sucesso!");
       router.push(`/h/${slug}`);
     } catch (error) {
       console.error(error);
@@ -357,13 +406,26 @@ export default function CriarPage() {
                 accept="image/*"
                 multiple
                 onChange={(e) => {
-                  const files = Array.from(e.target.files || []).slice(0, 4);
-                  setArquivosFotos(files);
+                  const files = Array.from(e.target.files || []).slice(
+                    0,
+                    LIMITE_FOTOS
+                  );
+
+                  try {
+                    files.forEach(validarImagem);
+                    setArquivosFotos(files);
+                  } catch (error) {
+                    setArquivosFotos([]);
+
+                    if (error instanceof Error) {
+                      alert(error.message);
+                    }
+                  }
                 }}
                 className="w-full rounded-xl border border-zinc-300 bg-white px-4 py-3 text-zinc-900 file:mr-4 file:rounded-lg file:border-0 file:bg-pink-500 file:px-4 file:py-2 file:font-medium file:text-white hover:file:bg-pink-600"
               />
               <p className="mt-2 text-xs text-zinc-500">
-                Máximo de 4 fotos e até {LIMITE_IMAGEM_MB}MB por foto.
+                Máximo de {LIMITE_FOTOS} fotos e até {LIMITE_IMAGEM_MB}MB por foto.
               </p>
             </div>
 
@@ -376,21 +438,42 @@ export default function CriarPage() {
                 accept="video/*"
                 onChange={(e) => {
                   const file = e.target.files?.[0] || null;
-                  setArquivoVideo(file);
+
+                  if (!file) {
+                    setArquivoVideo(null);
+                    return;
+                  }
+
+                  try {
+                    validarVideo(file);
+                    setArquivoVideo(file);
+                  } catch (error) {
+                    setArquivoVideo(null);
+
+                    if (error instanceof Error) {
+                      alert(error.message);
+                    }
+                  }
                 }}
                 className="w-full rounded-xl border border-zinc-300 bg-white px-4 py-3 text-zinc-900 file:mr-4 file:rounded-lg file:border-0 file:bg-pink-500 file:px-4 file:py-2 file:font-medium file:text-white hover:file:bg-pink-600"
               />
               <p className="mt-2 text-xs text-zinc-500">
-                Máximo de {LIMITE_VIDEO_MB}MB. Para testar, use um vídeo curto.
+                Máximo de {LIMITE_VIDEO_MB}MB. Use vídeos curtos em MP4 para melhor desempenho.
               </p>
             </div>
+
+            {statusUpload && (
+              <div className="rounded-xl bg-pink-50 p-3 text-sm font-medium text-pink-700">
+                {statusUpload}
+              </div>
+            )}
 
             <button
               type="submit"
               disabled={carregando}
               className="w-full rounded-xl bg-pink-500 px-4 py-3 font-semibold text-white transition hover:bg-pink-600 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {carregando ? "Salvando homenagem..." : "Gerar homenagem premium"}
+              {carregando ? "Enviando arquivos..." : "Gerar homenagem premium"}
             </button>
           </form>
         </div>
@@ -551,7 +634,9 @@ function PreviewLateral({
         className={`overflow-hidden rounded-[2rem] bg-gradient-to-b ${tema.bg} border border-zinc-100 shadow-sm`}
       >
         <div className="p-5">
-          <p className={`text-xs font-semibold uppercase tracking-[0.25em] ${tema.badge}`}>
+          <p
+            className={`text-xs font-semibold uppercase tracking-[0.25em] ${tema.badge}`}
+          >
             Prévia do tema
           </p>
 
@@ -559,7 +644,9 @@ function PreviewLateral({
             Para {nome}
           </h3>
 
-          <p className="mt-2 text-sm text-zinc-500">Música escolhida: {musicaNome}</p>
+          <p className="mt-2 text-sm text-zinc-500">
+            Música escolhida: {musicaNome}
+          </p>
 
           {temVideo && (
             <div className="mt-4 rounded-2xl bg-black/90 p-4 text-center text-white">
@@ -580,7 +667,9 @@ function PreviewLateral({
             </div>
           )}
 
-          <div className={`mt-5 rounded-2xl p-4 text-zinc-700 ${tema.box} ${tema.msgFont}`}>
+          <div
+            className={`mt-5 rounded-2xl p-4 text-zinc-700 ${tema.box} ${tema.msgFont}`}
+          >
             {msg.slice(0, 150)}
             {msg.length > 150 ? "..." : ""}
           </div>
