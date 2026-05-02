@@ -152,8 +152,9 @@ export default function CriarPage() {
     arquivo: File,
     tipo: "imagem" | "video"
   ): Promise<string> {
-    const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
-    const uploadPreset = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
+    const cloudName = "dz5bvskyw";
+    const uploadPreset = "homenagem_premium_unsigned";
+
     console.log("CLOUD NAME:", cloudName);
     console.log("UPLOAD PRESET:", uploadPreset);
 
