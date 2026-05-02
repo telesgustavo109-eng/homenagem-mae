@@ -1,6 +1,6 @@
 "use client";
 
-import CarrosselInfinito3D from "./CarrosselInfinito3D";
+import CarrosselInfinito3D from "./Carrossel3D";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Playfair_Display,
