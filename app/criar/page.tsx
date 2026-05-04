@@ -177,7 +177,9 @@ export default function CriarPage() {
     formData.append("signature", assinatura.signature);
     formData.append("folder", assinatura.folder);
 
-    const endpoint = `https://api.cloudinary.com/v1_1/${assinatura.cloudName}/${assinatura.resourceType}/upload`;
+    const resourceType = tipo === "video" ? "video" : "image";
+
+    const endpoint = `https://api.cloudinary.com/v1_1/${assinatura.cloudName}/${resourceType}/upload`;
 
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
